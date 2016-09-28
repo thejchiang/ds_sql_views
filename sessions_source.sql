@@ -1,0 +1,120 @@
+CREATE VIEW site_sessions AS (
+  SELECT a.anonymous_id,
+    a.id,
+    a.received_at,
+    a.uuid,
+    a.context_campaign_ad,
+    a.context_campaign_adgroup,
+    a.context_campaign_content,
+    a.context_campaign_facebook,
+    a.context_campaign_matchtype,
+    a.context_campaign_name,
+    a.context_campaign_tm_source,
+    a.context_campaign_utm_campaign,
+    a.context_campaign_utm_medium,
+    a.context_campaign_utm_source,
+    a.context_ip,
+    a.context_library_name,
+    a.context_library_version,
+    a.context_page_path,
+    a.context_page_search,
+    a.context_page_title,
+    a.context_page_url,
+    a.context_user_agent,
+    a.path,
+    a.referrer,
+    a.search,
+    a.sent_at,
+    a.title,
+    a.url,
+    a.user_id,
+    a.context_campaign_amp_utm_campaign,
+    a.context_campaign_amp_utm_medium,
+    a.context_campaign_amp_utm_source,
+    a.context_campaign_mutm_source,
+    a.timestamp,
+    date(convert_timezone('PST', a.timestamp)) AS session_date,
+    a.context_campaign_utm_content,
+    a.context_campaign_utm_term,
+    a.context_campaign_amp_utm_content,
+    a.context_campaign_amp_utm_term,
+    lower(a.context_campaign_source::text) AS utm_source,
+    lower(a.context_campaign_medium::text) AS utm_medium,
+    lower(a.context_campaign_campaign::text) AS utm_campaign,
+    lower(a.context_campaign_term::text) AS utm_term,
+    lower(a.context_page_referrer::text) AS page_referrer
+ FROM ds_production.pages a)
+CREATE VIEW app_sessions AS
+  (SELECT e.anonymous_id,
+          e.id,
+          e.received_at,
+          e.uuid,
+          e.uuid_ts,
+          e.context_app_build,
+          e.context_app_namespace,
+          e.context_app_version,
+          e.context_device_id,
+          e.context_device_manufacturer,
+          e.context_device_model,
+          e.context_device_type,
+          e.context_ip,
+          e.context_library_name,
+          e.context_library_version,
+          e.context_locale,
+          e.context_network_bluetooth,
+          e.context_network_carrier,
+          e.context_network_cellular,
+          e.context_network_wifi,
+          e.context_os_name,
+          e.context_os_version,
+          e.context_screen_height,
+          e.context_screen_width,
+          e.context_timezone,
+          e.event,
+          e.event_text,
+          e.path,
+          e.sent_at,
+          e.splash,
+          e.timestamp,
+          date(convert_timezone('PST', e.timestamp)) AS session_date,
+          e.user_id,
+          e.context_device_ad_tracking_enabled,
+          e.context_device_advertising_id,
+          lower(e.utm_campaign::text) AS utm_campaign,
+          lower(e.utm_source::text) AS utm_source,
+          lower(e.utm_medium::text) AS utm_medium,
+          lower(e.utm_term::text) AS utm_term,
+          lower(e.utm_content::text) AS utm_content
+   FROM ds_production.deep_link e)
+
+CREATE VIEW session_days AS (
+  WITH app_sessions_bydate AS (
+    SELECT session_date,
+     COUNT(DISTINCT anonymous_id),
+     utm_source,
+     utm_medium
+    FROM app_sessions
+    GROUP BY session_date,
+     utm_source,
+     utm_medium),
+     
+    site_sessions_bydate AS (
+      SELECT session_date,
+       COUNT(DISTINCT anonymous_id),
+       utm_source,
+       utm_medium
+      FROM site_sessions
+      GROUP BY session_date,
+       utm_source,
+       utm_medium)
+  SELECT s.session_date,
+    s.utm_source,
+    s.utm_medium COALESCE(s.count, 0) AS site_views,
+    COALESCE(a.count, 0) AS app_views,
+    COALESCE(s.count,0) + COALESCE(a.count, 0) AS total_views
+  FROM site_sessions_bydate s
+  LEFT JOIN app_sessions_bydate a
+   ON a.session_date = s.session_date
+   AND a.utm_source = s.utm_source
+   AND a.utm_medium = s.utm_medium
+  ORDER BY s.session_date)
